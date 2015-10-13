@@ -20,7 +20,7 @@
 __revision__ = ""
 
 from openalea.vpltk.qt import QtGui, QtCore
-from openalea.plantgl.all import Scene, Sphere, Discretizer, GLRenderer, BoundingBox
+from openalea.plantgl.all import Scene, Sphere, Shape, Discretizer, GLRenderer, BoundingBox
 from openalea.core.observer import AbstractListener
 from openalea.oalab.gui import resources_rc
 from openalea.oalab.world.world import WorldObject
@@ -288,12 +288,17 @@ class Viewer(AbstractListener, view3D):
 
     def update_world_object(self, world_object, attribute):
         object_name = world_object.name
+        from tissuelab.gui.vtkviewer.vtkworldviewer import attribute_value
 
         if self.object_repr.has_key(object_name):
             object_data = self.object_repr[object_name]
             if isinstance(object_data,Scene):
+                dtype = 'polydata'
+                alpha = attribute_value(world_object, dtype, 'polydata_alpha')
                 if attribute['name'] == 'display_polydata':
                     self.display_scene(name=world_object.name, disp=attribute['value'])
+                elif attribute['name'] == 'polydata_alpha':
+                    self.set_scene_transparency(world_object.name, transparency=1.0-attribute['value'])
 
     def display_scene(self, name, disp=True):
         self.scene.clear()
@@ -309,23 +314,44 @@ class Viewer(AbstractListener, view3D):
             if self.property[object_name]['disp']:
                 self.scene += self.object_scene[object_name]
         self.draw()
-        if self.autofocus:
-            self.update_radius()
+        # if self.autofocus:
+        #     self.update_radius()
         self.updateGL()
 
     def add_scene(self, world_object, object_scene, **kwargs):
+        from tissuelab.gui.vtkviewer.vtkworldviewer import setdefault
+        from tissuelab.gui.vtkviewer.vtkviewer import default_value
+        from copy import deepcopy
+
         world_object.silent = True
 
+        dtype = 'polydata'
         name = world_object.name
 
-        self.object_scene[name] = object_scene
+        print "PglViewer : add_scene! ",object_scene.todict()
+        self.object_scene[name] =  object_scene
+
+        setdefault(world_object, dtype, 'alpha', 'polydata_alpha', **kwargs)
+
+        alpha = default_value(dtype, ['polydata_alpha', 'alpha'], **kwargs)
+        self.set_scene_transparency(name,1.0-alpha)
+
         self.property[name] = dict()
         self.display_scene(name, disp=True)
 
         world_object.silent = False
 
-        from openalea.core.interface import IBool
-        world_object.set_attribute(name='display_polydata',value=True, interface=IBool, alias=u"Display Polydata")
+        setdefault(world_object, dtype, 'display_polydata', **kwargs)
+
+        # from openalea.core.interface import IBool
+        # world_object.set_attribute(name='display_polydata',value=True, interface=IBool, alias=u"Display Polydata")
+
+    def set_scene_transparency(self, name, transparency=0.0):
+        print "PglViewer : set_scene_transparency! ",self.object_scene[name].todict()," (",transparency,")"
+        for scene_object in self.object_scene[name]:
+            if isinstance(scene_object,Shape):
+                scene_object.appearance.transparency = transparency
+                scene_object.appearance.diffuse = 1.0 - transparency
 
     def actions(self):
         return self._actions
